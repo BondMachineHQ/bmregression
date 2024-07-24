@@ -1,0 +1,2 @@
+# bmregression
+Regression tests suite
