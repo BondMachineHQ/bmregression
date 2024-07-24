@@ -22,6 +22,11 @@ fn main() {
     }
 }
 
+// override the clone of bmexample
+// override the clone of vmregressiondata
+// override the tools installation (uses the tools in the system)
+// location of the regression data if resetting
+
 fn execute_regression( regression_name: &str) -> Result<(), io::Error> {
     println!("Running regression: {}", regression_name);
 
