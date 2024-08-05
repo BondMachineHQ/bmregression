@@ -1,5 +1,6 @@
 extern crate tempdir;
 use clap::{Parser, Subcommand};
+use yaml_rust::{YamlLoader};
 
 use std::fs;
 use std::io::{self};
@@ -111,27 +112,23 @@ fn main() -> Result<(), io::Error> {
     match args.command.unwrap() {
         Commands::List { name } => {
             if let Err(_) = list_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
-                ::std::process::exit(1);
             }
         }
         Commands::Describe { name } => {
-            if let Err(_) = describe_regression(&name.unwrap_or("".to_string()), args.debug) {
-                ::std::process::exit(1);
+            if let Err(_) = describe_regressions(&name.unwrap_or("".to_string()), args.debug) {
             }
         }
         Commands::Run { name } => {
-            if let Err(_) = execute_regression(&name.unwrap_or("".to_string()), args.debug) {
-                ::std::process::exit(1);
+            if let Err(err) = run_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
+                println!("Error executing regression: {}", err);
             }
         }
         Commands::Reset { name } => {
-            if let Err(_) = reset_regression(&name.unwrap_or("".to_string()), args.debug) {
-                ::std::process::exit(1);    
+            if let Err(_) = reset_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
             }
         }
         Commands::Diff { name } => {
-            if let Err(_) = diff_regression(&name.unwrap_or("".to_string()), args.debug) {
-                ::std::process::exit(1);    
+            if let Err(_) = diff_regressions(&name.unwrap_or("".to_string()), args.debug) {
             }
         }
     }
@@ -153,36 +150,185 @@ fn list_regressions(_source: &str, target: &str, regression_name: &str, debug: b
     let entries = fs::read_dir(target)?;
     for entry in entries {
         let entry = entry?;
-        println!("{}", entry.file_name().to_string_lossy());
+        let filename = entry.file_name();
+        // filter out the files that do not match the pattern
+        if filename.to_str().unwrap().contains(regression_name) {
+            println!("\t{}", filename.to_str().unwrap());
+        }
+        
     }
 
     Ok(())
 }
 
-fn describe_regression( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn describe_regressions( regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
         println!("Describe regressions matching: \"{}\"", regression_name);
     }
     Ok(())
 }
 
-fn reset_regression( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn run_regressions(source: &str, target: &str, regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
-        println!("Reset regressions matching: \"{}\"", regression_name);
+        println!("Run regressions matching: \"{}\"", regression_name);
     }
+
+    // run the regressions
+    let entries = fs::read_dir(target)?;
+    for entry in entries {
+        let entry = entry?;
+        let filename = entry.file_name();
+        // filter out the files that do not match the pattern
+        if filename.to_str().unwrap().contains(regression_name) {
+            if let Err(err) = execute_regression(source, target, "run", filename.to_str().unwrap(), debug) {
+                println!("Error executing regression {}: {}", filename.to_str().unwrap(), err);
+            }
+        }
+    }
+
     Ok(())
 }
 
-fn diff_regression( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn reset_regressions(source: &str, target: &str, regression_name: &str, debug: bool) -> Result<(), io::Error> {
+    if debug {
+        println!("Reset regressions matching: \"{}\"", regression_name);
+    }
+
+    // reset the regressions
+    let entries = fs::read_dir(target)?;
+    for entry in entries {
+        let entry = entry?;
+        let filename = entry.file_name();
+        // filter out the files that do not match the pattern
+        if filename.to_str().unwrap().contains(regression_name) {
+            if let Err(err) = execute_regression(source, target, "reset", filename.to_str().unwrap(), debug) {
+                println!("Error executing regression {}: {}", filename.to_str().unwrap(), err);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn diff_regressions( regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
         println!("Diff regressions matching: \"{}\"", regression_name);
     }
     Ok(())
 }
 
-fn execute_regression( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn execute_regression(source: &str, target: &str, action: &str, regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
-        println!("Execute regressions matching: \"{}\"", regression_name);
+        println!("Execute regression: \"{}\"", regression_name);
     }
+
+    // Check if the regression exists in the target directory
+    let regression_dir = format!("{}/{}", target, regression_name);
+    if !fs::metadata(&regression_dir).is_ok() {
+        return Err(io::Error::new(io::ErrorKind::Other, "getting regression directory failed"));
+    }
+
+    // Read the regression file configuration
+    let regression_config = regression_dir + "/config.yaml";
+
+    // Check if the regression configuration file exists
+    if !fs::metadata(&regression_config).is_ok() {
+        return Err(io::Error::new(io::ErrorKind::Other, "getting regression configuration file failed"));
+    }
+
+    // Read the regression configuration file and parse it
+    let regression_config = fs::read_to_string(&regression_config)?;
+    let regression_config = yaml_rust::YamlLoader::load_from_str(&regression_config);
+
+    // Show the regression configuration
+    if debug {
+        println!("Regression configuration:");
+        println!("{:?}", regression_config);
+    }
+
+    let config = &regression_config.unwrap();
+
+    let regbase = config[0]["regbase"].as_str().unwrap();
+    let sourcedata = config[0]["sourcedata"].as_str().unwrap();
+    let targetdata = config[0]["targetdata"].as_str().unwrap();
+    let regcommand = config[0]["regcommand"].as_str().unwrap();
+
+    if debug {
+        println!("regbase: {}", regbase);
+        println!("sourcedata: {}", sourcedata);
+        println!("targetdata: {}", targetdata);
+        println!("regcommand: {}", regcommand);
+    }
+
+    // Check if the regression base directory exists
+    let examplesource = format!("{}/{}", source, regbase);
+
+    if debug {
+        println!("examplesource: {}", examplesource);
+    }
+
+    if !fs::metadata(&examplesource).is_ok() {
+        return Err(io::Error::new(io::ErrorKind::Other, "getting regression base directory failed"));
+    }
+
+    // Execute the regression command
+    let regcommand = regcommand.split_whitespace().collect::<Vec<&str>>();
+    let regcommand = Command::new(regcommand[0])
+        .current_dir(&examplesource)
+        .args(&regcommand[1..])
+        .output()?;
+
+    if debug {
+        println!("regcommand: {:?}", regcommand);
+    }
+
+    if !regcommand.status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, "executing regression command failed"));
+    }
+
+    // Check if the result exists
+    let result = format!("{}/{}", examplesource, sourcedata);
+
+    if debug {
+        println!("result: {}", result);
+    }
+
+    if !fs::metadata(&result).is_ok() {
+        return Err(io::Error::new(io::ErrorKind::Other, "getting regression result failed"));
+    }
+
+    // Load the result
+    let result_data = fs::read_to_string(&result)?;
+
+    let regression_dir = format!("{}/{}", target, regression_name);
+
+    // Check if the target data directory exists
+    let targetdatafull = format!("{}/{}", regression_dir, targetdata);
+
+    if debug {
+        println!("targetdatafull: {}", targetdatafull);
+    }
+
+    if !fs::metadata(&targetdatafull).is_ok() {
+        return Err(io::Error::new(io::ErrorKind::Other, "getting regression target data directory failed"));
+    }
+
+    // Load the target data
+    let target_data = fs::read_to_string(&targetdatafull)?;
+
+    if action == "run" {
+        // Compare the result with the target data
+        if result_data == target_data {
+            println!("Regression {}: \x1b[0;32mpassed\x1b[0m", regression_name);
+        } else {
+            println!("Regression {}: \x1b[0;31mfailed\x1b[0m", regression_name);
+        }
+    } else if action == "reset" {
+        // Copy the result to the target data
+        fs::copy(result, targetdatafull)?;
+
+        println!("Regression {}: \x1b[0;33mreset\x1b[0m", regression_name);
+    }
+
     Ok(())
 }
