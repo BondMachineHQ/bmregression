@@ -112,10 +112,12 @@ fn main() -> Result<(), io::Error> {
     match args.command.unwrap() {
         Commands::List { name } => {
             if let Err(_) = list_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
+                println!("Error listing regressions");
             }
         }
         Commands::Describe { name } => {
-            if let Err(_) = describe_regressions(&name.unwrap_or("".to_string()), args.debug) {
+            if let Err(_) = describe_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
+                println!("Error describing regressions");
             }
         }
         Commands::Run { name } => {
@@ -125,10 +127,12 @@ fn main() -> Result<(), io::Error> {
         }
         Commands::Reset { name } => {
             if let Err(_) = reset_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
+                println!("Error resetting regressions");
             }
         }
         Commands::Diff { name } => {
-            if let Err(_) = diff_regressions(&name.unwrap_or("".to_string()), args.debug) {
+            if let Err(_) = diff_regressions(&srcdir, &tgtdir, &name.unwrap_or("".to_string()), args.debug) {
+                println!("Error diffing regressions");
             }
         }
     }
@@ -151,6 +155,9 @@ fn list_regressions(_source: &str, target: &str, regression_name: &str, debug: b
     for entry in entries {
         let entry = entry?;
         let filename = entry.file_name();
+        if filename.to_str().unwrap() == ".git" {
+            continue;
+        }
         // filter out the files that do not match the pattern
         if filename.to_str().unwrap().contains(regression_name) {
             println!("\t{}", filename.to_str().unwrap());
@@ -161,10 +168,27 @@ fn list_regressions(_source: &str, target: &str, regression_name: &str, debug: b
     Ok(())
 }
 
-fn describe_regressions( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn describe_regressions( _source: &str, target: &str, regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
         println!("Describe regressions matching: \"{}\"", regression_name);
     }
+
+    // Describe the regressions
+    let entries = fs::read_dir(target)?;
+    for entry in entries {
+        let entry = entry?;
+        let filename = entry.file_name();
+        if filename.to_str().unwrap() == ".git" {
+            continue;
+        }
+        // filter out the files that do not match the pattern
+        if filename.to_str().unwrap().contains(regression_name) {
+            if let Err(err) = execute_regression("", target, "describe", filename.to_str().unwrap(), debug) {
+                println!("Error describing regression {}: {}", filename.to_str().unwrap(), err);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -178,6 +202,9 @@ fn run_regressions(source: &str, target: &str, regression_name: &str, debug: boo
     for entry in entries {
         let entry = entry?;
         let filename = entry.file_name();
+        if filename.to_str().unwrap() == ".git" {
+            continue;
+        }
         // filter out the files that do not match the pattern
         if filename.to_str().unwrap().contains(regression_name) {
             if let Err(err) = execute_regression(source, target, "run", filename.to_str().unwrap(), debug) {
@@ -199,6 +226,9 @@ fn reset_regressions(source: &str, target: &str, regression_name: &str, debug: b
     for entry in entries {
         let entry = entry?;
         let filename = entry.file_name();
+        if filename.to_str().unwrap() == ".git" {
+            continue;
+        }
         // filter out the files that do not match the pattern
         if filename.to_str().unwrap().contains(regression_name) {
             if let Err(err) = execute_regression(source, target, "reset", filename.to_str().unwrap(), debug) {
@@ -210,10 +240,27 @@ fn reset_regressions(source: &str, target: &str, regression_name: &str, debug: b
     Ok(())
 }
 
-fn diff_regressions( regression_name: &str, debug: bool) -> Result<(), io::Error> {
+fn diff_regressions(source: &str, target: &str, regression_name: &str, debug: bool) -> Result<(), io::Error> {
     if debug {
         println!("Diff regressions matching: \"{}\"", regression_name);
     }
+
+    // diff the regressions
+    let entries = fs::read_dir(target)?;
+    for entry in entries {
+        let entry = entry?;
+        let filename = entry.file_name();
+        if filename.to_str().unwrap() == ".git" {
+            continue;
+        }
+        // filter out the files that do not match the pattern
+        if filename.to_str().unwrap().contains(regression_name) {
+            if let Err(err) = execute_regression(source, target, "diff", filename.to_str().unwrap(), debug) {
+                println!("Error executing regression {}: {}", filename.to_str().unwrap(), err);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -238,7 +285,7 @@ fn execute_regression(source: &str, target: &str, action: &str, regression_name:
 
     // Read the regression configuration file and parse it
     let regression_config = fs::read_to_string(&regression_config)?;
-    let regression_config = yaml_rust::YamlLoader::load_from_str(&regression_config);
+    let regression_config = YamlLoader::load_from_str(&regression_config);
 
     // Show the regression configuration
     if debug {
@@ -259,6 +306,16 @@ fn execute_regression(source: &str, target: &str, action: &str, regression_name:
         println!("targetdata: {}", targetdata);
         println!("regcommand: {}", regcommand);
     }
+
+    if action == "describe" {
+        println!("Regression: \x1b[0;32m{}\x1b[0m", regression_name);
+        println!("  regbase: {}", regbase);
+        println!("  sourcedata: {}", sourcedata);
+        println!("  targetdata: {}", targetdata);
+        println!("  regcommand: {}", regcommand);
+        return Ok(());
+    }
+
 
     // Check if the regression base directory exists
     let examplesource = format!("{}/{}", source, regbase);
@@ -328,6 +385,9 @@ fn execute_regression(source: &str, target: &str, action: &str, regression_name:
         fs::copy(result, targetdatafull)?;
 
         println!("Regression {}: \x1b[0;33mreset\x1b[0m", regression_name);
+    } else if action == "diff" {
+        // TODO: implement diff
+        println!("diff is not implemented yet");
     }
 
     Ok(())
