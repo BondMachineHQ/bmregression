@@ -1,4 +1,5 @@
 extern crate tempdir;
+use clap::builder::ArgPredicate;
 use clap::{Parser, Subcommand};
 use yaml_rust::{YamlLoader};
 
@@ -386,8 +387,23 @@ fn execute_regression(source: &str, target: &str, action: &str, regression_name:
 
         println!("Regression {}: \x1b[0;33mreset\x1b[0m", regression_name);
     } else if action == "diff" {
-        // TODO: implement diff
-        println!("diff is not implemented yet");
+        // Diff the result with the target data
+        let diff = Command::new("sdiff")
+            .arg("--suppress-common-lines")
+            .arg(result)
+            .arg(targetdatafull)
+            .output()?;
+
+        if debug {
+            println!("diff: {:?}", diff);
+        }
+
+        if diff.status.success() {
+            println!("Regression {}: \x1b[0;32mno differences\x1b[0m", regression_name);
+        } else {
+            println!("Regression {}: \x1b[0;31mdifferences found\x1b[0m", regression_name);
+            println!("{}", String::from_utf8_lossy(&diff.stdout));
+        }
     }
 
     Ok(())
