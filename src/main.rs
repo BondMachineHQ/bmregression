@@ -1,5 +1,4 @@
 extern crate tempdir;
-use clap::builder::ArgPredicate;
 use clap::{Parser, Subcommand};
 use yaml_rust::{YamlLoader};
 
