@@ -329,11 +329,20 @@ fn execute_regression(source: &str, target: &str, action: &str, regression_name:
     }
 
     // Execute the regression command
-    let regcommand = regcommand.split_whitespace().collect::<Vec<&str>>();
-    let regcommand = Command::new(regcommand[0])
+    // let regcommand = regcommand.split_whitespace().collect::<Vec<&str>>();
+    // let regcommand = Command::new(regcommand[0])
+        // .current_dir(&examplesource)
+        // .args(&regcommand[1..])
+        // .output()?;
+
+    let regcommand = Command::new("sh")
         .current_dir(&examplesource)
-        .args(&regcommand[1..])
+        .arg("-c")
+        .arg(regcommand)
         .output()?;
+        // .args(&regcommand[1..])
+        // .output()?;
+
 
     if debug {
         println!("regcommand: {:?}", regcommand);
