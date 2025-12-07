@@ -564,9 +564,9 @@ fn execute_regression(
     }
 
     // Load configuration file
-    let regression_config = regression_dir + "/config.yaml";
+    let config_path = regression_dir + "/config.yaml";
 
-    if !fs::metadata(&regression_config).is_ok() {
+    if !fs::metadata(&config_path).is_ok() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression configuration file failed",
@@ -574,15 +574,15 @@ fn execute_regression(
     }
 
     // Parse YAML configuration
-    let regression_config = fs::read_to_string(&regression_config)?;
-    let regression_config = YamlLoader::load_from_str(&regression_config);
+    let config_content = fs::read_to_string(&config_path)?;
+    let parsed_config = YamlLoader::load_from_str(&config_content);
 
     if debug {
         println!("Regression configuration:");
-        println!("{:?}", regression_config);
+        println!("{:?}", parsed_config);
     }
 
-    let config = &regression_config.unwrap();
+    let config = &parsed_config.unwrap();
 
     // Extract configuration values
     let regbase = config[0]["regbase"].as_str().unwrap();
