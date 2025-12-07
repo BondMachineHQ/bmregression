@@ -325,7 +325,7 @@ fn check_regression_tags(
     let config_path = format!("{}/{}/config.yaml", target, regression_name);
 
     // If config doesn't exist, skip this regression
-    if !fs::metadata(&config_path).is_ok() {
+    if !std::path::Path::new(&config_path).exists() {
         return false;
     }
 
@@ -334,15 +334,7 @@ fn check_regression_tags(
         if let Ok(parsed_config) = YamlLoader::load_from_str(&config_content) {
             if let Some(config) = parsed_config.get(0) {
                 // Get tags from config, default to ["default"] if not present
-                let regression_tags: Vec<String> = if let Some(tags_yaml) = config["tags"].as_vec()
-                {
-                    tags_yaml
-                        .iter()
-                        .filter_map(|t| t.as_str().map(|s| s.to_string()))
-                        .collect()
-                } else {
-                    vec!["default".to_string()]
-                };
+                let regression_tags = extract_tags_from_config(config);
 
                 if debug {
                     println!(
@@ -352,16 +344,34 @@ fn check_regression_tags(
                 }
 
                 // Check if any requested tag matches any regression tag
-                for requested_tag in requested_tags {
-                    if regression_tags.contains(requested_tag) {
-                        return true;
-                    }
-                }
+                return requested_tags
+                    .iter()
+                    .any(|tag| regression_tags.contains(tag));
             }
         }
     }
 
     false
+}
+
+/// Extracts tags from a YAML config, defaulting to ["default"] if not present.
+///
+/// # Arguments
+///
+/// * `config` - The parsed YAML configuration
+///
+/// # Returns
+///
+/// A vector of tag strings
+fn extract_tags_from_config(config: &yaml_rust::Yaml) -> Vec<String> {
+    if let Some(tags_yaml) = config["tags"].as_vec() {
+        tags_yaml
+            .iter()
+            .filter_map(|t| t.as_str().map(|s| s.to_string()))
+            .collect()
+    } else {
+        vec!["default".to_string()]
+    }
 }
 
 /// Describes regression tests by displaying their configuration details.
@@ -690,15 +700,8 @@ fn execute_regression(
     let targetdata = config[0]["targetdata"].as_str().unwrap();
     let regcommand = config[0]["regcommand"].as_str().unwrap();
 
-    // Extract tags, default to ["default"] if not present
-    let tags: Vec<String> = if let Some(tags_yaml) = config[0]["tags"].as_vec() {
-        tags_yaml
-            .iter()
-            .filter_map(|t| t.as_str().map(|s| s.to_string()))
-            .collect()
-    } else {
-        vec!["default".to_string()]
-    };
+    // Extract tags using helper function
+    let tags = extract_tags_from_config(&config[0]);
 
     if debug {
         println!("regbase: {}", regbase);
