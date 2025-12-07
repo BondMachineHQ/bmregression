@@ -189,6 +189,7 @@ Regression basys3_blink: differences found
 - `--data-url <URL>`: Custom URL for regression data repository
 - `--examples-url <URL>`: Custom URL for examples repository
 - `--system-tools` or `-s`: Use system-installed tools instead of official sources
+- `--tag <TAG>` or `-t <TAG>`: Filter tests by tag(s). Multiple tags can be specified comma-separated. If not specified, only tests with 'default' tag are selected
 
 ### Configuration File Format
 
@@ -199,6 +200,7 @@ regbase: basys3_blink              # Directory name in bmexamples repository
 sourcedata: working_dir/bondmachine.sv  # Path to generated output file
 targetdata: bondmachine.sv         # Path to expected output file in regression data
 regcommand: make hdl               # Command to execute to generate output
+tags: [default, quick]             # Optional: Tags for filtering (defaults to ["default"])
 ```
 
 **Field descriptions:**
@@ -206,6 +208,7 @@ regcommand: make hdl               # Command to execute to generate output
 - `sourcedata`: Relative path to the generated output file within the example directory
 - `targetdata`: Filename of the expected output in the regression data directory
 - `regcommand`: Shell command to execute in the example directory to generate output
+- `tags`: (Optional) List of tags for categorizing and filtering tests. If not specified, defaults to `["default"]`
 
 ## Examples
 
@@ -254,6 +257,41 @@ bmregression list basys3
 # Run only those tests
 bmregression run basys3
 ```
+
+### Example 5: Using Tags to Filter Tests
+
+Tags allow you to categorize and selectively run groups of tests:
+
+```bash
+# Run only tests tagged with "quick"
+bmregression run --tag quick
+
+# Run tests with either "quick" or "smoke" tags
+bmregression run --tag quick,smoke
+
+# List all tests with the "hardware" tag
+bmregression list --tag hardware
+
+# Run all tests with default tag (default behavior if --tag is not specified)
+bmregression run
+
+# Describe tests with "integration" tag
+bmregression describe --tag integration
+```
+
+**Tag Usage Tips:**
+- Tests without a `tags` field in their `config.yaml` are automatically tagged with `"default"`
+- The default behavior (when `--tag` is not specified) is to run only tests with the `"default"` tag
+- Multiple tags can be specified comma-separated: `--tag tag1,tag2,tag3`
+- A test is included if it has at least one tag matching your filter
+
+**Common Tag Conventions:**
+- `default`: Core tests that should always run
+- `quick`: Fast-running tests suitable for rapid iteration
+- `slow`: Long-running tests
+- `hardware`: Tests requiring hardware-specific setups
+- `integration`: Integration tests
+- `smoke`: Basic smoke tests
 
 ## Development
 
