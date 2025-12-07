@@ -93,7 +93,7 @@ List all available regression tests or filter by name:
 bmregression list
 
 # List regressions matching a pattern
-bmregression list --name basys3
+bmregression list basys3
 ```
 
 **Example output:**
@@ -113,7 +113,7 @@ Display configuration details for regression tests:
 bmregression describe
 
 # Describe specific regression
-bmregression describe --name basys3_blink
+bmregression describe basys3_blink
 ```
 
 **Example output:**
@@ -134,10 +134,10 @@ Execute regression tests and compare outputs:
 bmregression run
 
 # Run specific regression
-bmregression run --name basys3_blink
+bmregression run basys3_blink
 
 # Run with debug output
-bmregression --debug run --name basys3_blink
+bmregression --debug run basys3_blink
 ```
 
 **Example output:**
@@ -155,7 +155,7 @@ Update expected outputs with current results (use after intentional changes):
 bmregression reset
 
 # Reset specific regression
-bmregression reset --name basys3_blink
+bmregression reset basys3_blink
 ```
 
 **Example output:**
@@ -172,7 +172,7 @@ Show detailed differences between current and expected outputs:
 bmregression diff
 
 # Diff specific regression
-bmregression diff --name basys3_blink
+bmregression diff basys3_blink
 ```
 
 **Example output:**
@@ -217,7 +217,7 @@ If you have already cloned the repositories:
 bmregression \
   --examples-dir ~/projects/bmexamples \
   --data-dir ~/projects/bmregressiondata \
-  run --name basys3_blink
+  run basys3_blink
 ```
 
 ### Example 2: Run All Tests with Debug Output
@@ -239,20 +239,20 @@ After making intentional changes to the examples:
 
 ```bash
 # Run tests to see what changed
-bmregression diff --name basys3_blink
+bmregression diff basys3_blink
 
 # If changes are correct, update expectations
-bmregression reset --name basys3_blink
+bmregression reset basys3_blink
 ```
 
 ### Example 4: Working with a Subset of Tests
 
 ```bash
 # List all tests containing "basys3"
-bmregression list --name basys3
+bmregression list basys3
 
 # Run only those tests
-bmregression run --name basys3
+bmregression run basys3
 ```
 
 ## Development
