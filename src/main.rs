@@ -666,7 +666,7 @@ fn execute_regression(
 
     // Verify regression directory exists
     let regression_dir = format!("{}/{}", target, regression_name);
-    if !fs::metadata(&regression_dir).is_ok() {
+    if !std::path::Path::new(&regression_dir).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression directory failed",
@@ -676,7 +676,7 @@ fn execute_regression(
     // Load configuration file
     let config_path = regression_dir + "/config.yaml";
 
-    if !fs::metadata(&config_path).is_ok() {
+    if !std::path::Path::new(&config_path).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression configuration file failed",
@@ -729,7 +729,7 @@ fn execute_regression(
         println!("examplesource: {}", examplesource);
     }
 
-    if !fs::metadata(&examplesource).is_ok() {
+    if !std::path::Path::new(&examplesource).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression base directory failed",
@@ -761,7 +761,7 @@ fn execute_regression(
         println!("result: {}", result);
     }
 
-    if !fs::metadata(&result).is_ok() {
+    if !std::path::Path::new(&result).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression result failed",
@@ -780,7 +780,7 @@ fn execute_regression(
         println!("targetdatafull: {}", targetdatafull);
     }
 
-    if !fs::metadata(&targetdatafull).is_ok() {
+    if !std::path::Path::new(&targetdatafull).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression target data directory failed",
