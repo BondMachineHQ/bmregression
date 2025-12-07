@@ -66,6 +66,9 @@ struct Cli {
     /// Use the tools in the system instead of the ones installed from the official sources
     #[clap(short, long, default_value = "false")]
     system_tools: bool,
+    /// Filter tests by tag(s). Multiple tags can be specified comma-separated. If not specified, only tests with 'default' tag are selected
+    #[clap(short, long, default_value = "default")]
+    tag: String,
 }
 
 /// Available subcommands for regression test operations.
@@ -179,6 +182,9 @@ fn main() -> Result<(), io::Error> {
             .to_string();
     }
 
+    // Parse tags into a vector for easier filtering
+    let tags: Vec<String> = args.tag.split(',').map(|s| s.trim().to_string()).collect();
+
     // Execute the requested command
     match args.command.unwrap() {
         Commands::List { name } => {
@@ -186,6 +192,7 @@ fn main() -> Result<(), io::Error> {
                 &srcdir,
                 &tgtdir,
                 &name.unwrap_or("".to_string()),
+                &tags,
                 args.debug,
             ) {
                 println!("Error listing regressions");
@@ -196,6 +203,7 @@ fn main() -> Result<(), io::Error> {
                 &srcdir,
                 &tgtdir,
                 &name.unwrap_or("".to_string()),
+                &tags,
                 args.debug,
             ) {
                 println!("Error describing regressions");
@@ -206,6 +214,7 @@ fn main() -> Result<(), io::Error> {
                 &srcdir,
                 &tgtdir,
                 &name.unwrap_or("".to_string()),
+                &tags,
                 args.debug,
             ) {
                 println!("Error executing regression: {}", err);
@@ -216,6 +225,7 @@ fn main() -> Result<(), io::Error> {
                 &srcdir,
                 &tgtdir,
                 &name.unwrap_or("".to_string()),
+                &tags,
                 args.debug,
             ) {
                 println!("Error resetting regressions");
@@ -226,6 +236,7 @@ fn main() -> Result<(), io::Error> {
                 &srcdir,
                 &tgtdir,
                 &name.unwrap_or("".to_string()),
+                &tags,
                 args.debug,
             ) {
                 println!("Error diffing regressions");
@@ -244,6 +255,7 @@ fn main() -> Result<(), io::Error> {
 /// * `_source` - Path to the examples directory (unused in listing)
 /// * `target` - Path to the regression data directory
 /// * `regression_name` - Filter pattern for regression names (empty string matches all)
+/// * `tags` - List of tags to filter by (tests must match at least one tag)
 /// * `debug` - Enable debug output
 ///
 /// # Errors
@@ -262,10 +274,12 @@ fn list_regressions(
     _source: &str,
     target: &str,
     regression_name: &str,
+    tags: &[String],
     debug: bool,
 ) -> Result<(), io::Error> {
     if debug {
         println!("List of regressions matching: \"{}\"", regression_name);
+        println!("Filtering by tags: {:?}", tags);
     }
 
     println!("Regressions found:");
@@ -279,11 +293,85 @@ fn list_regressions(
         }
         // Filter regressions by name pattern
         if filename.to_str().unwrap().contains(regression_name) {
-            println!("\t{}", filename.to_str().unwrap());
+            // Check if regression matches any of the requested tags
+            if check_regression_tags(target, filename.to_str().unwrap(), tags, debug) {
+                println!("\t{}", filename.to_str().unwrap());
+            }
         }
     }
 
     Ok(())
+}
+
+/// Checks if a regression's tags match any of the requested tags.
+///
+/// # Arguments
+///
+/// * `target` - Path to the regression data directory
+/// * `regression_name` - Name of the regression to check
+/// * `requested_tags` - List of tags to match against
+/// * `debug` - Enable debug output
+///
+/// # Returns
+///
+/// Returns true if the regression has at least one tag that matches the requested tags,
+/// or if the regression has no tags defined and "default" is in the requested tags.
+fn check_regression_tags(
+    target: &str,
+    regression_name: &str,
+    requested_tags: &[String],
+    debug: bool,
+) -> bool {
+    let config_path = format!("{}/{}/config.yaml", target, regression_name);
+
+    // If config doesn't exist, skip this regression
+    if !std::path::Path::new(&config_path).exists() {
+        return false;
+    }
+
+    // Read and parse the config file
+    if let Ok(config_content) = fs::read_to_string(&config_path) {
+        if let Ok(parsed_config) = YamlLoader::load_from_str(&config_content) {
+            if let Some(config) = parsed_config.get(0) {
+                // Get tags from config, default to ["default"] if not present
+                let regression_tags = extract_tags_from_config(config);
+
+                if debug {
+                    println!(
+                        "Regression {} has tags: {:?}",
+                        regression_name, regression_tags
+                    );
+                }
+
+                // Check if any requested tag matches any regression tag
+                return requested_tags
+                    .iter()
+                    .any(|tag| regression_tags.contains(tag));
+            }
+        }
+    }
+
+    false
+}
+
+/// Extracts tags from a YAML config, defaulting to ["default"] if not present.
+///
+/// # Arguments
+///
+/// * `config` - The parsed YAML configuration
+///
+/// # Returns
+///
+/// A vector of tag strings
+fn extract_tags_from_config(config: &yaml_rust::Yaml) -> Vec<String> {
+    if let Some(tags_yaml) = config["tags"].as_vec() {
+        tags_yaml
+            .iter()
+            .filter_map(|t| t.as_str().map(|s| s.to_string()))
+            .collect()
+    } else {
+        vec!["default".to_string()]
+    }
 }
 
 /// Describes regression tests by displaying their configuration details.
@@ -293,6 +381,7 @@ fn list_regressions(
 /// * `_source` - Path to the examples directory (unused in describing)
 /// * `target` - Path to the regression data directory
 /// * `regression_name` - Filter pattern for regression names (empty string matches all)
+/// * `tags` - List of tags to filter by (tests must match at least one tag)
 /// * `debug` - Enable debug output
 ///
 /// # Errors
@@ -308,14 +397,17 @@ fn list_regressions(
 /// - sourcedata: Path to generated output file
 /// - targetdata: Path to expected output file
 /// - regcommand: Command to execute
+/// - tags: List of tags for this regression
 fn describe_regressions(
     _source: &str,
     target: &str,
     regression_name: &str,
+    tags: &[String],
     debug: bool,
 ) -> Result<(), io::Error> {
     if debug {
         println!("Describe regressions matching: \"{}\"", regression_name);
+        println!("Filtering by tags: {:?}", tags);
     }
 
     let entries = fs::read_dir(target)?;
@@ -326,16 +418,18 @@ fn describe_regressions(
         if filename.to_str().unwrap() == ".git" {
             continue;
         }
-        // Filter regressions by name pattern and describe each one
+        // Filter regressions by name pattern and tag
         if filename.to_str().unwrap().contains(regression_name) {
-            if let Err(err) =
-                execute_regression("", target, "describe", filename.to_str().unwrap(), debug)
-            {
-                println!(
-                    "Error describing regression {}: {}",
-                    filename.to_str().unwrap(),
-                    err
-                );
+            if check_regression_tags(target, filename.to_str().unwrap(), tags, debug) {
+                if let Err(err) =
+                    execute_regression("", target, "describe", filename.to_str().unwrap(), debug)
+                {
+                    println!(
+                        "Error describing regression {}: {}",
+                        filename.to_str().unwrap(),
+                        err
+                    );
+                }
             }
         }
     }
@@ -350,6 +444,7 @@ fn describe_regressions(
 /// * `source` - Path to the examples directory
 /// * `target` - Path to the regression data directory
 /// * `regression_name` - Filter pattern for regression names (empty string matches all)
+/// * `tags` - List of tags to filter by (tests must match at least one tag)
 /// * `debug` - Enable debug output
 ///
 /// # Errors
@@ -366,10 +461,12 @@ fn run_regressions(
     source: &str,
     target: &str,
     regression_name: &str,
+    tags: &[String],
     debug: bool,
 ) -> Result<(), io::Error> {
     if debug {
         println!("Run regressions matching: \"{}\"", regression_name);
+        println!("Filtering by tags: {:?}", tags);
     }
 
     let entries = fs::read_dir(target)?;
@@ -380,16 +477,18 @@ fn run_regressions(
         if filename.to_str().unwrap() == ".git" {
             continue;
         }
-        // Filter regressions by name pattern and run each one
+        // Filter regressions by name pattern and tag
         if filename.to_str().unwrap().contains(regression_name) {
-            if let Err(err) =
-                execute_regression(source, target, "run", filename.to_str().unwrap(), debug)
-            {
-                println!(
-                    "Error executing regression {}: {}",
-                    filename.to_str().unwrap(),
-                    err
-                );
+            if check_regression_tags(target, filename.to_str().unwrap(), tags, debug) {
+                if let Err(err) =
+                    execute_regression(source, target, "run", filename.to_str().unwrap(), debug)
+                {
+                    println!(
+                        "Error executing regression {}: {}",
+                        filename.to_str().unwrap(),
+                        err
+                    );
+                }
             }
         }
     }
@@ -407,6 +506,7 @@ fn run_regressions(
 /// * `source` - Path to the examples directory
 /// * `target` - Path to the regression data directory
 /// * `regression_name` - Filter pattern for regression names (empty string matches all)
+/// * `tags` - List of tags to filter by (tests must match at least one tag)
 /// * `debug` - Enable debug output
 ///
 /// # Errors
@@ -422,10 +522,12 @@ fn reset_regressions(
     source: &str,
     target: &str,
     regression_name: &str,
+    tags: &[String],
     debug: bool,
 ) -> Result<(), io::Error> {
     if debug {
         println!("Reset regressions matching: \"{}\"", regression_name);
+        println!("Filtering by tags: {:?}", tags);
     }
 
     let entries = fs::read_dir(target)?;
@@ -436,16 +538,18 @@ fn reset_regressions(
         if filename.to_str().unwrap() == ".git" {
             continue;
         }
-        // Filter regressions by name pattern and reset each one
+        // Filter regressions by name pattern and tag
         if filename.to_str().unwrap().contains(regression_name) {
-            if let Err(err) =
-                execute_regression(source, target, "reset", filename.to_str().unwrap(), debug)
-            {
-                println!(
-                    "Error executing regression {}: {}",
-                    filename.to_str().unwrap(),
-                    err
-                );
+            if check_regression_tags(target, filename.to_str().unwrap(), tags, debug) {
+                if let Err(err) =
+                    execute_regression(source, target, "reset", filename.to_str().unwrap(), debug)
+                {
+                    println!(
+                        "Error executing regression {}: {}",
+                        filename.to_str().unwrap(),
+                        err
+                    );
+                }
             }
         }
     }
@@ -462,6 +566,7 @@ fn reset_regressions(
 /// * `source` - Path to the examples directory
 /// * `target` - Path to the regression data directory
 /// * `regression_name` - Filter pattern for regression names (empty string matches all)
+/// * `tags` - List of tags to filter by (tests must match at least one tag)
 /// * `debug` - Enable debug output
 ///
 /// # Errors
@@ -478,10 +583,12 @@ fn diff_regressions(
     source: &str,
     target: &str,
     regression_name: &str,
+    tags: &[String],
     debug: bool,
 ) -> Result<(), io::Error> {
     if debug {
         println!("Diff regressions matching: \"{}\"", regression_name);
+        println!("Filtering by tags: {:?}", tags);
     }
 
     let entries = fs::read_dir(target)?;
@@ -492,16 +599,18 @@ fn diff_regressions(
         if filename.to_str().unwrap() == ".git" {
             continue;
         }
-        // Filter regressions by name pattern and diff each one
+        // Filter regressions by name pattern and tag
         if filename.to_str().unwrap().contains(regression_name) {
-            if let Err(err) =
-                execute_regression(source, target, "diff", filename.to_str().unwrap(), debug)
-            {
-                println!(
-                    "Error executing regression {}: {}",
-                    filename.to_str().unwrap(),
-                    err
-                );
+            if check_regression_tags(target, filename.to_str().unwrap(), tags, debug) {
+                if let Err(err) =
+                    execute_regression(source, target, "diff", filename.to_str().unwrap(), debug)
+                {
+                    println!(
+                        "Error executing regression {}: {}",
+                        filename.to_str().unwrap(),
+                        err
+                    );
+                }
             }
         }
     }
@@ -531,6 +640,7 @@ fn diff_regressions(
 /// sourcedata: working_dir/output.sv # Generated output file path
 /// targetdata: output.sv           # Expected output file path
 /// regcommand: make hdl            # Command to execute
+/// tags: [default, quick]          # Optional tags (defaults to ["default"])
 /// ```
 ///
 /// # Errors
@@ -556,7 +666,7 @@ fn execute_regression(
 
     // Verify regression directory exists
     let regression_dir = format!("{}/{}", target, regression_name);
-    if !fs::metadata(&regression_dir).is_ok() {
+    if !std::path::Path::new(&regression_dir).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression directory failed",
@@ -566,7 +676,7 @@ fn execute_regression(
     // Load configuration file
     let config_path = regression_dir + "/config.yaml";
 
-    if !fs::metadata(&config_path).is_ok() {
+    if !std::path::Path::new(&config_path).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression configuration file failed",
@@ -590,11 +700,15 @@ fn execute_regression(
     let targetdata = config[0]["targetdata"].as_str().unwrap();
     let regcommand = config[0]["regcommand"].as_str().unwrap();
 
+    // Extract tags using helper function
+    let tags = extract_tags_from_config(&config[0]);
+
     if debug {
         println!("regbase: {}", regbase);
         println!("sourcedata: {}", sourcedata);
         println!("targetdata: {}", targetdata);
         println!("regcommand: {}", regcommand);
+        println!("tags: {:?}", tags);
     }
 
     // For describe action, just print configuration and return
@@ -604,6 +718,7 @@ fn execute_regression(
         println!("  sourcedata: {}", sourcedata);
         println!("  targetdata: {}", targetdata);
         println!("  regcommand: {}", regcommand);
+        println!("  tags: {:?}", tags);
         return Ok(());
     }
 
@@ -614,7 +729,7 @@ fn execute_regression(
         println!("examplesource: {}", examplesource);
     }
 
-    if !fs::metadata(&examplesource).is_ok() {
+    if !std::path::Path::new(&examplesource).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression base directory failed",
@@ -646,7 +761,7 @@ fn execute_regression(
         println!("result: {}", result);
     }
 
-    if !fs::metadata(&result).is_ok() {
+    if !std::path::Path::new(&result).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression result failed",
@@ -665,7 +780,7 @@ fn execute_regression(
         println!("targetdatafull: {}", targetdatafull);
     }
 
-    if !fs::metadata(&targetdatafull).is_ok() {
+    if !std::path::Path::new(&targetdatafull).exists() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "getting regression target data directory failed",
