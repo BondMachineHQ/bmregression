@@ -6,6 +6,8 @@ A command-line regression testing tool for the BondMachine project.
 
 `bmregression` is a Rust-based tool designed to automate regression testing for BondMachine examples. It manages test execution, output comparison, and reporting across multiple example projects. The tool works by executing build commands in example directories and comparing the generated outputs against expected results stored in a separate data repository.
 
+> **How to use bmregression as general purpose regression tool**: See [README-generalpurpose.md](README-generalpurpose.md) for using this tool with non-BondMachine projects.
+
 ## Architecture
 
 The tool operates on two repositories:
