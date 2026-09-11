@@ -805,8 +805,8 @@ fn execute_regression(
         println!("Regression {}: \x1b[0;33mreset\x1b[0m", regression_name);
     } else if action == "diff" {
         // Show differences using sdiff
-        let diff = Command::new("sdiff")
-            .arg("--suppress-common-lines")
+        let diff = Command::new("meld")
+            // .arg("--suppress-common-lines")
             .arg(result)
             .arg(targetdatafull)
             .output()?;
